@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import * as fal from "@fal-ai/serverless-client";
 
-const CanvasComponent = ({ id, onGenerate }) => {
+const CanvasComponent = ({ id, onGenerate, onCopy, copiedImageData }) => {
   const [canvas, setCanvas] = useState(null);
   const [ctx, setCtx] = useState(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -44,17 +44,27 @@ const CanvasComponent = ({ id, onGenerate }) => {
 
   const startDrawing = (e) => {
     if (!ctx) return;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
     ctx.strokeStyle = 'white';
     ctx.lineWidth = 5;
     ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.moveTo(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
+    ctx.moveTo(x, y);
     setIsDrawing(true);
   };
 
   const draw = (e) => {
     if (!isDrawing || !ctx) return;
-    ctx.lineTo(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
+    ctx.lineTo(x, y);
     ctx.stroke();
   };
 
@@ -87,9 +97,38 @@ const CanvasComponent = ({ id, onGenerate }) => {
     }
   };
 
+  const copyCanvas = () => {
+    const imageData = canvas.toDataURL();
+    onCopy(imageData);
+    console.log('Canvas content copied');
+  };
+
+  const pasteCanvas = useCallback(() => {
+    if (copiedImageData && ctx) {
+      const img = new Image();
+      img.onload = () => {
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        setImageData(copiedImageData);
+      };
+      img.src = copiedImageData;
+    } else {
+      console.log('No copied image data available or context not ready');
+    }
+  }, [copiedImageData, ctx, canvas]);
+
+  useEffect(() => {
+    document.addEventListener('paste', pasteCanvas);
+    return () => {
+      document.removeEventListener('paste', pasteCanvas);
+    };
+  }, [pasteCanvas]);
+
   return (
-    <div style={{ border: '1px solid #ccc', padding: '2px', margin: '2px', borderRadius: '5px' }}>
-      <div style={{ display: 'flex', gap: '1px', marginBottom: '10px', flexWrap: 'wrap' }}>
+    <div 
+      style={{ border: '1px solid #ccc', padding: '10px', borderRadius: '5px', display: 'flex', flexDirection: 'column', height: '100%', boxSizing: 'border-box' }}
+      onPaste={pasteCanvas}
+    >
+      <div style={{ display: 'flex', gap: '5px', marginBottom: '10px', flexWrap: 'wrap' }}>
         <input
           type="text"
           placeholder="Prompt"
@@ -146,31 +185,47 @@ const CanvasComponent = ({ id, onGenerate }) => {
           />
         </div>
       </div>
-      <div style={{ display: 'flex', gap: '20px' }}>
-        <canvas
-          ref={handleCanvasRef}
-          width={500}
-          height={500}
-          style={{ border: '1px solid black' }}
-          onMouseDown={startDrawing}
-          onMouseMove={draw}
-          onMouseUp={stopDrawing}
-          onMouseOut={stopDrawing}
-        />
-        {imageResult && (
-          <img src={imageResult} alt="Generated" style={{ width: 500, height: 500 }} />
-        )}
+      <div style={{ display: 'flex', gap: '10px', flexGrow: 1, minHeight: 0 }}>
+        <div style={{ width: '50%', display: 'flex', flexDirection: 'column' }}>
+          <canvas
+            ref={handleCanvasRef}
+            width={400}
+            height={400}
+            style={{ border: '1px solid black', width: '100%', height: 'auto', maxHeight: '100%', objectFit: 'contain' }}
+            onMouseDown={startDrawing}
+            onMouseMove={draw}
+            onMouseUp={stopDrawing}
+            onMouseOut={stopDrawing}
+          />
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px' }}>
+            <button onClick={copyCanvas}>Copy</button>
+            <button onClick={pasteCanvas}>Paste</button>
+          </div>
+        </div>
+        <div style={{ width: '50%', border: '1px solid #ccc', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+          {imageResult ? (
+            <img src={imageResult} alt="Generated" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+          ) : (
+            <span>Generated image will appear here</span>
+          )}
+        </div>
       </div>
       <button onClick={handleGenerate} style={{ marginTop: '10px' }}>Generate</button>
     </div>
   );
 };
 
-const MultipleCanvasComponent = () => {
-  const [canvases, setCanvases] = useState([{ id: 1 }]);
+const GridCanvas = () => {
+  const [canvases, setCanvases] = useState([{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }]);
+  const [copiedImageData, setCopiedImageData] = useState(null);
 
   const addCanvas = () => {
-    setCanvases([...canvases, { id: canvases.length + 1 }]);
+    const newId = canvases.length + 1;
+    setCanvases([...canvases, { id: newId }]);
+  };
+
+  const handleCopy = (imageData) => {
+    setCopiedImageData(imageData);
   };
 
   const generateImage = async (params) => {
@@ -192,8 +247,8 @@ const MultipleCanvasComponent = () => {
         },
         logs: true,
         onQueueUpdate: (update) => {
-          if (update.status === "IN_PROGRESS" && update.logs) {
-            update.logs.forEach(log => console.log(log.message));
+          if (update.status === "IN_PROGRESS") {
+            console.log(update);
           }
         },
       });
@@ -211,14 +266,30 @@ const MultipleCanvasComponent = () => {
     }
   };
 
+  const columns = Math.ceil(Math.sqrt(canvases.length));
+
   return (
-    <div>
+    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', padding: '20px', boxSizing: 'border-box' }}>
       <button onClick={addCanvas} style={{ marginBottom: '20px' }}>Add Canvas</button>
-      {canvases.map((canvas) => (
-        <CanvasComponent key={canvas.id} id={canvas.id} onGenerate={generateImage} />
-      ))}
+      <div style={{ 
+        flexGrow: 1, 
+        display: 'grid', 
+        gridTemplateColumns: `repeat(${columns}, 1fr)`, 
+        gridAutoRows: '1fr', 
+        gap: '20px', 
+      }}>
+        {canvases.map((canvas) => (
+          <CanvasComponent
+            key={canvas.id}
+            id={canvas.id}
+            onGenerate={generateImage}
+            onCopy={handleCopy}
+            copiedImageData={copiedImageData}
+          />
+        ))}
+      </div>
     </div>
   );
 };
 
-export default MultipleCanvasComponent;
+export default GridCanvas;
