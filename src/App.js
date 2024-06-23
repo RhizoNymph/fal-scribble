@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import * as fal from "@fal-ai/serverless-client";
 
-const CanvasComponent = ({ id, onGenerate, onCopy, copiedImageData }) => {
+const CanvasComponent = React.forwardRef(({ id, onGenerate, onCopy, copiedImageData }, ref) => {
   const [canvas, setCanvas] = useState(null);
   const [ctx, setCtx] = useState(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -103,6 +103,14 @@ const CanvasComponent = ({ id, onGenerate, onCopy, copiedImageData }) => {
     console.log('Canvas content copied');
   };
 
+  const clearCanvas = () => {
+    if (ctx) {
+      ctx.fillStyle = 'black';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      setImageData(null);
+    }
+  };
+
   const pasteCanvas = useCallback(() => {
     if (copiedImageData && ctx) {
       const img = new Image();
@@ -122,6 +130,10 @@ const CanvasComponent = ({ id, onGenerate, onCopy, copiedImageData }) => {
       document.removeEventListener('paste', pasteCanvas);
     };
   }, [pasteCanvas]);
+
+  React.useImperativeHandle(ref, () => ({
+    generate: handleGenerate
+  }));
 
   return (
     <div 
@@ -199,6 +211,7 @@ const CanvasComponent = ({ id, onGenerate, onCopy, copiedImageData }) => {
           />
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px' }}>
             <button onClick={copyCanvas}>Copy</button>
+            <button onClick={clearCanvas}>Clear</button>
             <button onClick={pasteCanvas}>Paste</button>
           </div>
         </div>
@@ -213,11 +226,12 @@ const CanvasComponent = ({ id, onGenerate, onCopy, copiedImageData }) => {
       <button onClick={handleGenerate} style={{ marginTop: '10px' }}>Generate</button>
     </div>
   );
-};
+});
 
 const GridCanvas = () => {
   const [canvases, setCanvases] = useState([{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }]);
   const [copiedImageData, setCopiedImageData] = useState(null);
+  const canvasRefs = useRef({});
 
   const addCanvas = () => {
     const newId = canvases.length + 1;
@@ -266,11 +280,22 @@ const GridCanvas = () => {
     }
   };
 
+  const generateAllImages = () => {
+    Object.values(canvasRefs.current).forEach(ref => {
+      if (ref && ref.generate) {
+        ref.generate();
+      }
+    });
+  };
+
   const columns = Math.ceil(Math.sqrt(canvases.length));
 
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', padding: '20px', boxSizing: 'border-box' }}>
-      <button onClick={addCanvas} style={{ marginBottom: '20px' }}>Add Canvas</button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
+        <button onClick={addCanvas}>Add Canvas</button>
+        <button onClick={generateAllImages}>Generate All</button>
+      </div>
       <div style={{ 
         flexGrow: 1, 
         display: 'grid', 
@@ -281,6 +306,7 @@ const GridCanvas = () => {
         {canvases.map((canvas) => (
           <CanvasComponent
             key={canvas.id}
+            ref={el => canvasRefs.current[canvas.id] = el}
             id={canvas.id}
             onGenerate={generateImage}
             onCopy={handleCopy}
