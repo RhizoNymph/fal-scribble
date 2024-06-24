@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import * as fal from "@fal-ai/serverless-client";
 
-const CanvasComponent = React.forwardRef(({ id, onGenerate, onCopy, copiedImageData }, ref) => {
+const CanvasComponent = React.forwardRef(({ id, onGenerate, onCopy, copiedImageData, singleCanvas }, ref) => {
   const [canvas, setCanvas] = useState(null);
   const [ctx, setCtx] = useState(null);
   const [isDrawing, setIsDrawing] = useState(false);
@@ -13,6 +13,8 @@ const CanvasComponent = React.forwardRef(({ id, onGenerate, onCopy, copiedImageD
   const [strength, setStrength] = useState(0.8);
   const [imageResult, setImageResult] = useState(null);
   const [imageData, setImageData] = useState(null);
+  const [brushSize, setBrushSize] = useState(5);
+  const [isEraser, setIsEraser] = useState(false);
 
   const initializeCanvas = useCallback((canvas) => {
     const context = canvas.getContext('2d');
@@ -49,8 +51,8 @@ const CanvasComponent = React.forwardRef(({ id, onGenerate, onCopy, copiedImageD
     const scaleY = canvas.height / rect.height;
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
-    ctx.strokeStyle = 'white';
-    ctx.lineWidth = 5;
+    ctx.strokeStyle = isEraser ? 'black' : 'white';
+    ctx.lineWidth = brushSize;
     ctx.lineCap = 'round';
     ctx.beginPath();
     ctx.moveTo(x, y);
@@ -137,7 +139,15 @@ const CanvasComponent = React.forwardRef(({ id, onGenerate, onCopy, copiedImageD
 
   return (
     <div 
-      style={{ border: '1px solid #ccc', padding: '10px', borderRadius: '5px', display: 'flex', flexDirection: 'column', height: '100%', boxSizing: 'border-box' }}
+      style={{ 
+        border: '1px solid #ccc', 
+        padding: '10px', 
+        borderRadius: '5px', 
+        display: 'flex', 
+        flexDirection: 'column', 
+        height: '100%',
+        boxSizing: 'border-box' 
+      }}
       onPaste={pasteCanvas}
     >
       <div style={{ display: 'flex', gap: '5px', marginBottom: '10px', flexWrap: 'wrap' }}>
@@ -196,6 +206,19 @@ const CanvasComponent = React.forwardRef(({ id, onGenerate, onCopy, copiedImageD
             onChange={(e) => setStrength(Number(e.target.value))}
           />
         </div>
+        <div>
+          <label>Brush Size: {brushSize}</label>
+          <input
+            type="range"
+            min="1"
+            max="10"
+            value={brushSize}
+            onChange={(e) => setBrushSize(Number(e.target.value))}
+          />
+        </div>
+        <button onClick={() => setIsEraser(!isEraser)}>
+          {isEraser ? 'Swap to Draw' : 'Swap to Eraser'}
+        </button>
       </div>
       <div style={{ display: 'flex', gap: '10px', flexGrow: 1, minHeight: 0 }}>
         <div style={{ width: '50%', display: 'flex', flexDirection: 'column' }}>
@@ -203,7 +226,7 @@ const CanvasComponent = React.forwardRef(({ id, onGenerate, onCopy, copiedImageD
             ref={handleCanvasRef}
             width={400}
             height={400}
-            style={{ border: '1px solid black', width: '100%', height: 'auto', maxHeight: '100%', objectFit: 'contain' }}
+            style={{ border: '1px solid black', width: '90%', height: 'auto', maxHeight: '90%', objectFit: 'contain' }}
             onMouseDown={startDrawing}
             onMouseMove={draw}
             onMouseUp={stopDrawing}
@@ -213,9 +236,10 @@ const CanvasComponent = React.forwardRef(({ id, onGenerate, onCopy, copiedImageD
             <button onClick={copyCanvas}>Copy</button>
             <button onClick={clearCanvas}>Clear</button>
             <button onClick={pasteCanvas}>Paste</button>
+            <button onClick={handleGenerate}>Generate</button>
           </div>
         </div>
-        <div style={{ width: '50%', border: '1px solid #ccc', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+        <div style={{ width: '50%', border: '1px solid #ccc', display: 'flex', justifyContent: 'center', alignItems: 'center', height: '90%' }}>
           {imageResult ? (
             <img src={imageResult} alt="Generated" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
           ) : (
@@ -223,13 +247,16 @@ const CanvasComponent = React.forwardRef(({ id, onGenerate, onCopy, copiedImageD
           )}
         </div>
       </div>
-      <button onClick={handleGenerate} style={{ marginTop: '10px' }}>Generate</button>
     </div>
   );
 });
 
 const GridCanvas = () => {
-  const [canvases, setCanvases] = useState([{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }]);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [password, setPassword] = useState('');
+  const correctPassword = 'Commune'; // Replace with your desired password
+
+  const [canvases, setCanvases] = useState([{ id: 1 }]);
   const [copiedImageData, setCopiedImageData] = useState(null);
   const canvasRefs = useRef({});
 
@@ -290,11 +317,36 @@ const GridCanvas = () => {
 
   const columns = Math.ceil(Math.sqrt(canvases.length));
 
+  const handleLogin = (e) => {
+    e.preventDefault();
+    if (password === correctPassword) {
+      setIsAuthenticated(true);
+    } else {
+      alert('Incorrect password');
+    }
+  };
+
+  if (!isAuthenticated) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <form onSubmit={handleLogin}>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Enter password"
+          />
+          <button type="submit">Login</button>
+        </form>
+      </div>
+    );
+  }
+
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', padding: '20px', boxSizing: 'border-box' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '20px' }}>
         <button onClick={addCanvas}>Add Canvas</button>
-        <button onClick={generateAllImages}>Generate All</button>
+        {canvases.length > 1 && <button onClick={generateAllImages}>Generate All</button>}
       </div>
       <div style={{ 
         flexGrow: 1, 
@@ -302,6 +354,7 @@ const GridCanvas = () => {
         gridTemplateColumns: `repeat(${columns}, 1fr)`, 
         gridAutoRows: '1fr', 
         gap: '20px', 
+        overflowY: 'auto'
       }}>
         {canvases.map((canvas) => (
           <CanvasComponent
@@ -311,6 +364,7 @@ const GridCanvas = () => {
             onGenerate={generateImage}
             onCopy={handleCopy}
             copiedImageData={copiedImageData}
+            singleCanvas={canvases.length === 1}
           />
         ))}
       </div>
